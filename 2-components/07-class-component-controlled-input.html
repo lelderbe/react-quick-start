@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hello React</title>
+</head>
+
+<body>
+    <div id="root"></div>
+
+    <script src="../lib/react.development.js"></script>
+    <script src="../lib/react-dom.development.js"></script>
+    <script src="../lib/babel.min.js"></script>
+    <script type="text/babel">
+        class TextAreaCounter extends React.Component {
+            constructor() {
+                super();
+                this.state = {};
+                // this.onTextChange = this.onTextChange.bind(this);
+            }
+
+            onTextChange(event) {
+                this.setState({
+                    text: event.target.value,
+                });
+            }
+
+            // onTextChange = (event) => {
+            //     this.setState({
+            //         text: event.target.value,
+            //     });
+            // }
+
+            render() {
+                const text = 'text' in this.state ? this.state.text : this.props.text;
+                return (
+                    <div>
+                        <textarea value={text} onChange={(event) => this.onTextChange(event)} />
+                        {/*<textarea value={text} onChange={this.onTextChange} />*/}
+                        <h3>{text.length}</h3>
+                    </div>
+                );
+            }
+        }
+
+        TextAreaCounter.defaultProps = {
+            text: 'Count me as I type',
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+
+        root.render(
+            <React.Fragment>
+                <TextAreaCounter />
+                <TextAreaCounter text='something' />
+            </React.Fragment>
+        );
+    </script>
+
+</body>
+
+</html>

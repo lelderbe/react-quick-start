@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hello React</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+    <div id="root"></div>
+
+    <script src="../lib/react.development.js"></script>
+    <script src="../lib/react-dom.development.js"></script>
+    <script src="../lib/babel.min.js"></script>
+    <script src="../lib/prop-types.min.js"></script>
+
+    <script type="text/babel">
+        const headers = ['Book', 'Author', 'Language', 'Published', 'Sales'];
+        const data = [
+            ['A Tale of Two Cities', 'Charles Dickens', 'English', '1859', '200 million'],
+            ['Le Petit Prince (The Little Prince)', 'Antoine de Saint-Exupéry', 'French', '1943', '150 million'],
+            ["Harry Potter and the Philosopher's Stone", 'J. K. Rowling', 'English', '1997', '120 million'],
+            ['And Then There Were None', 'Agatha Christie', 'English', '1939', '100 million'],
+            ['Dream of the Red Chamber', 'Cao Xueqin', 'Chinese', '1791', '100 million'],
+            ['The Hobbit', 'J. R. R. Tolkien', 'English', '1937', '100 million'],
+        ];
+
+        function clone(o) {
+            return JSON.parse(JSON.stringify(o));
+        }
+
+        class Excel extends React.Component {
+            constructor(props) {
+                super();
+                this.state = {
+                    data: props.initialData,
+                    sortby: null,
+                    descending: false
+                };
+                this.sort = this.sort.bind(this);
+            }
+
+            sort(e) {
+                const column = e.target.cellIndex;
+                const data = clone(this.state.data);
+                const descending = this.state.sortby === column && !this.state.descending;
+                data.sort((a, b) => {
+                    if (a[column] === b[column]) {
+                        return 0;
+                    }
+                    return descending
+                        ? a[column] < b[column] ? 1 : -1
+                        : a[column] < b[column] ? -1 : 1;
+                });
+                this.setState({ data, sortby: column, descending });
+            }
+
+            render() {
+                return (
+                    <table>
+                        <thead onClick={this.sort}>
+                            <tr>
+                                {this.props.headers.map((item, index) => {
+                                    let title = item;
+                                    if (this.state.sortby === index) {
+                                        title += this.state.descending ? ' \u2191' : ' \u2193'
+                                    }
+                                    return <th key={item}>{title}</th>;
+                                })}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {this.state.data.map((book, index) => (
+                                <tr key={index}>
+                                    {book.map((item, index) => <td key={index}>{item}</td>)}
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                );
+            }
+        }
+
+        Excel.propTypes = {
+            headers: PropTypes.arrayOf(PropTypes.string),
+            initialData: PropTypes.arrayOf(PropTypes.
+                arrayOf(PropTypes.string)),
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+
+        root.render(
+            <Excel headers={headers} initialData={data} />
+        );
+    </script>
+
+</body>
+
+</html>

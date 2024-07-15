@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hello React</title>
+</head>
+
+<body>
+    <div id="root"></div>
+
+    <script src="../lib/react.development.js"></script>
+    <script src="../lib/react-dom.development.js"></script>
+    <script src="../lib/babel.min.js"></script>
+    <script type="text/babel">
+        class MyComponent extends React.Component {
+            render() {
+                return (
+                    <span>
+                        My name is <em>{this.props.name}</em>
+                    </span>
+                );
+            }
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+
+        root.render(
+            <MyComponent name='Joe' />
+        );
+    </script>
+
+</body>
+
+</html>
