@@ -43,27 +43,73 @@
                     descending: false,
                     edit: null, // { row: index, column: index }
                     search: false,
+                    searchTerms: {},
                 };
 
                 this.preSearchData = null;
+                this.log = [clone(this.state)];
+                this.replayID = null;
+                this.logPosition = 0;
 
                 this.sort = this.sort.bind(this);
                 this.showEditor = this.showEditor.bind(this);
                 this.save = this.save.bind(this);
                 this.toggleSearch = this.toggleSearch.bind(this);
                 this.search = this.search.bind(this);
+                this.logSetState = this.logSetState.bind(this);
+                this.keydownHandler = this.keydownHandler.bind(this);
+                this.replay = this.replay.bind(this);
+                this.undo = this.undo.bind(this);
+                this.redo = this.redo.bind(this);
+                this.downloadJSON = this.download.bind(this, 'json');
+                this.downloadCSV = this.download.bind(this, 'csv');
+            }
+
+            componentDidMount() {
+                document.addEventListener('keydown', this.keydownHandler);
+            }
+
+            componentWillUnmount() {
+                document.removeEventListener('keydown', this.keydownHandler);
+                clearInterval(this.replayID);
+            }
+
+            keydownHandler(e) {
+                if (e.altKey && e.shiftKey && e.keyCode === 82) {
+                    // ALT+SHIFT+R(eplay)
+                    this.replay();
+                } else if (e.altKey && e.shiftKey && e.keyCode === 90) {
+                    this.redo();
+                } else if (e.altKey && e.keyCode === 90) {
+                    this.undo();
+                }
+            }
+
+            undo() {
+                if (this.logPosition > 0) {
+                    this.logPosition--;
+                }
+                this.setState(this.log[this.logPosition]);
+            }
+
+            redo() {
+                if (this.log.length - 1 > this.logPosition) {
+                    this.logPosition++;
+                }
+                this.setState(this.log[this.logPosition]);
             }
 
             toggleSearch() {
                 if (!this.state.search) {
                     this.preSearchData = this.state.data;
-                    this.setState({
+                    this.logSetState({
                         search: true,
                     });
                 } else {
-                    this.setState({
+                    this.logSetState({
                         search: false,
                         data: this.preSearchData,
+                        searchTerms: {},
                     });
                     this.preSearchData = null;
                 }
@@ -71,19 +117,22 @@
 
             search(e) {
                 const needle = e.target.value.toLowerCase();
-                if (!needle) {
-                    this.setState({ data: this.preSearchData });
-                    return;
-                }
                 const column = e.target.dataset.index;
-                const filtered = this.preSearchData.filter((item) => item[column].toString().toLowerCase().includes(needle));
-                this.setState({
-                    data: filtered,
+                const newState = { searchTerms: { ...this.state.searchTerms, [column]: needle } };
+                const filtered = this._filter(newState);
+                this.logSetState({ ...newState, data: filtered });
+            }
+
+            _filter(state) {
+                let filtered = this.preSearchData;
+                Object.entries(state.searchTerms).forEach(([column, needle]) => {
+                    filtered = filtered.filter((item) => item[Number(column)].toString().toLowerCase().includes(needle));
                 });
+                return filtered;
             }
 
             showEditor(e) {
-                this.setState({
+                this.logSetState({
                     edit: {
                         row: parseInt(e.target.parentNode.dataset.row, 10),
                         column: e.target.cellIndex,
@@ -94,13 +143,19 @@
             save(e) {
                 e.preventDefault();
                 const input = e.target.firstChild;
-                const data = clone(this.state.data);
-                data[this.state.edit.row][this.state.edit.column] = input.value;
-                this.setState({
+                const data = clone(this.state.data).map((row) => {
+                    if (row[row.length - 1] === this.state.edit.row) {
+                        row[this.state.edit.column] = input.value;
+                    }
+                    return row;
+                });
+                this.logSetState({
                     edit: null,
                     data,
                 });
-
+                if (this.preSearchData) {
+                    this.preSearchData[this.state.edit.row][this.state.edit.column] = input.value;
+                }
             }
 
             sort(e) {
@@ -115,17 +170,67 @@
                         ? a[column] < b[column] ? 1 : -1
                         : a[column] < b[column] ? -1 : 1;
                 });
-                this.setState({ data, sortby: column, descending });
+                this.logSetState({ data, sortby: column, descending });
+            }
+
+            logSetState(state) {
+                if (this.logPosition < this.log.length - 1) {
+                    this.log = this.log.slice(0, this.logPosition + 1);
+                }
+                this.log.push({ ...clone(this.state), ...clone(state) });
+                this.setState(state);
+                this.logPosition++;
+            }
+
+            replay() {
+                if (this.log.length === 1) {
+                    console.warn('No state changes to replay yet');
+                    return;
+                }
+                let index = -1;
+                this.replayID = setInterval(() => {
+                    if (++index === this.log.length - 1) {
+                        clearInterval(this.replayID);
+                    }
+                    this.setState(this.log[index]);
+                }, 1000);
+            }
+
+            download(format, ev) {
+                const data = clone(this.state.data).map(row => {
+                    row.pop(); // отбрасываем последний столбец, recordId
+                    return row;
+                });
+                const contents =
+                    format === 'json'
+                        ? JSON.stringify(data, null, ' ')
+                        : data.reduce((result, row) => {
+                            return (
+                                result +
+                                row.reduce((rowcontent, cellcontent, idx) => {
+                                    const cell = cellcontent.replace(/"/g, '""');
+                                    const delimiter = idx < row.length - 1 ? ',' : '';
+                                    return `${rowcontent}"${cellcontent}"${delimiter}`;
+                                }, '') +
+                                '\n'
+                            );
+                        }, '');
+                const URL = window.URL || window.webkitURL;
+                const blob = new Blob([contents], { type: 'text/' + format });
+                ev.target.href = URL.createObjectURL(blob);
+                ev.target.download = 'data.' + format;
             }
 
             render() {
                 const searchRow = !this.state.search ? null : (
                     <tr onChange={this.search}>
-                        {this.props.headers.map((_, index) => (
-                            <td key={index}>
-                                <input type="text" data-index={index} />
-                            </td>
-                        ))}
+                        {this.props.headers.map((_, index) => {
+                            return (
+                                <td key={index}>
+                                    <input type="text" data-index={index} value={this.state.searchTerms[index] || ''} onChange={() => {}} />
+                                </td>
+                            );
+                        })}
                     </tr>
                 );
 
@@ -134,6 +239,21 @@
                         <button className="toolbar" onClick={this.toggleSearch}>
                             {this.state.search ? 'Hide search' : 'Show search'}
                         </button>
+                        <button className="toolbar" onClick={this.replay}>
+                            Replay
+                        </button>
+                        <button className="toolbar" onClick={this.undo}>
+                            Undo
+                        </button>
+                        <button className="toolbar" onClick={this.redo}>
+                            Redo
+                        </button>
+                        <a className="toolbar" href="data.json" onClick={this.downloadJSON}>
+                            Export JSON
+                        </a>
+                        <a className="toolbar" href="data.csv" onClick={this.downloadCSV}>
+                            Export CSV
+                        </a>
                         <table>
                             <thead onClick={this.sort}>
                                 <tr>
@@ -151,13 +271,13 @@
                                 {this.state.data.map((row, rowIndex) => {
                                     const recordId = row[row.length - 1];
                                     return (
-                                        <tr key={rowIndex} data-row={rowIndex}>
+                                        <tr key={recordId} data-row={recordId}>
                                             {row.map((item, columnIndex) => {
                                                 if (columnIndex === this.props.headers.length) {
                                                     return;
                                                 }
                                                 const edit = this.state.edit;
-                                                if (edit && edit.row === rowIndex && edit.column === columnIndex) {
+                                                if (edit && edit.row === recordId && edit.column === columnIndex) {
                                                     return (
                                                         <td key={columnIndex}>
                                                             <form onSubmit={this.save}>

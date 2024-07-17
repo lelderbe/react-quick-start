@@ -92,15 +92,22 @@
             }
 
             save(e) {
+                console.log(this.state);
                 e.preventDefault();
                 const input = e.target.firstChild;
-                const data = clone(this.state.data);
-                data[this.state.edit.row][this.state.edit.column] = input.value;
+                const data = clone(this.state.data).map((row) => {
+                    if (row[row.length - 1] === this.state.edit.row) {
+                        row[this.state.edit.column] = input.value;
+                    }
+                    return row;
+                });
                 this.setState({
                     edit: null,
                     data,
                 });
-
+                if (this.preSearchData) {
+                    this.preSearchData[this.state.edit.row][this.state.edit.column] = input.value;
+                }
             }
 
             sort(e) {
@@ -151,13 +158,13 @@
                                 {this.state.data.map((row, rowIndex) => {
                                     const recordId = row[row.length - 1];
                                     return (
-                                        <tr key={rowIndex} data-row={rowIndex}>
+                                        <tr key={recordId} data-row={recordId}>
                                             {row.map((item, columnIndex) => {
                                                 if (columnIndex === this.props.headers.length) {
                                                     return;
                                                 }
                                                 const edit = this.state.edit;
-                                                if (edit && edit.row === rowIndex && edit.column === columnIndex) {
+                                                if (edit && edit.row === row[row.length - 1] && edit.column === columnIndex) {
                                                     return (
                                                         <td key={columnIndex}>
                                                             <form onSubmit={this.save}>
