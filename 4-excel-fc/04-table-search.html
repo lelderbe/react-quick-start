@@ -38,6 +38,8 @@
                 descending: false,
             });
             const [edit, setEdit] = React.useState(null);
+            const [search, setSearch] = React.useState(false);
+            const [preSearchData, setPreSearchData] = React.useState(null);
 
             function sort(e) {
                 const column = e.target.cellIndex;
@@ -71,38 +73,77 @@
                 setEdit(null);
             }
 
+            function toggleSearch() {
+                if (!search) {
+                    setSearch(true);
+                    setPreSearchData(data);
+                } else {
+                    setSearch(false);
+                    setData(preSearchData);
+                    setPreSearchData(null);
+                }
+            }
+
+            function searching(e) {
+                const needle = e.target.value.toLowerCase();
+                if (!needle) {
+                    setData(preSearchData);
+                    return;
+                }
+                const column = e.target.dataset.index;
+                const filtered = preSearchData.filter((item) => item[column].toString().toLowerCase().includes(needle));
+                setData(filtered);
+            }
+
+            const searchRow = !search ? null : (
+                <tr onChange={searching}>
+                    {headers.map((_, index) => (
+                        <td key={index}>
+                            <input type="text" data-index={index} />
+                        </td>
+                    ))}
+                </tr>
+            );
+
             return (
-                <table>
-                    <thead onClick={sort}>
-                        <tr>
-                            {headers.map((item, index) => {
-                                let title = item;
-                                if (sorting.column === index) {
-                                    title += sorting.descending ? ' \u2191' : ' \u2193'
-                                }
-                                return <th key={index}>{title}</th>;
-                            })}
-                        </tr>
-                    </thead>
-                    <tbody onDoubleClick={showEditor}>
-                        {data.map((book, rowIndex) => (
-                            <tr key={rowIndex} data-row={rowIndex}>
-                                {book.map((item, columnIndex) => {
-                                    if (edit && edit.row === rowIndex && edit.column === columnIndex) {
-                                        return (
-                                            <td key={columnIndex}>
-                                                <form onSubmit={save}>
-                                                    <input type="text" defaultValue={item} autoFocus />
-                                                </form>
-                                            </td>
-                                        );
+                <React.Fragment>
+                    <button className="toolbar" onClick={toggleSearch}>
+                        {search ? 'Hide search' : 'Show search'}
+                    </button>
+
+                    <table>
+                        <thead onClick={sort}>
+                            <tr>
+                                {headers.map((item, index) => {
+                                    let title = item;
+                                    if (sorting.column === index) {
+                                        title += sorting.descending ? ' \u2191' : ' \u2193'
                                     }
-                                    return <td key={columnIndex}>{item}</td>;
+                                    return <th key={index}>{title}</th>;
                                 })}
                             </tr>
-                        ))}
-                    </tbody>
-                </table>
+                        </thead>
+                        <tbody onDoubleClick={showEditor}>
+                            {searchRow}
+                            {data.map((book, rowIndex) => (
+                                <tr key={rowIndex} data-row={rowIndex}>
+                                    {book.map((item, columnIndex) => {
+                                        if (edit && edit.row === rowIndex && edit.column === columnIndex) {
+                                            return (
+                                                <td key={columnIndex}>
+                                                    <form onSubmit={save}>
+                                                        <input type="text" defaultValue={item} autoFocus />
+                                                    </form>
+                                                </td>
+                                            );
+                                        }
+                                        return <td key={columnIndex}>{item}</td>;
+                                    })}
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </React.Fragment>
             );
         }
 

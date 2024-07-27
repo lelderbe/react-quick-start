@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hello React</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+    <div id="root"></div>
+
+    <script src="../lib/react.development.js"></script>
+    <script src="../lib/react-dom.development.js"></script>
+    <script src="../lib/babel.min.js"></script>
+    <script src="../lib/prop-types.min.js"></script>
+
+    <script type="text/babel">
+        const headers = ['Book', 'Author', 'Language', 'Published', 'Sales'];
+        const data = [
+            ['A Tale of Two Cities', 'Charles Dickens', 'English', '1859', '200 million'],
+            ['Le Petit Prince (The Little Prince)', 'Antoine de Saint-Exupéry', 'French', '1943', '150 million'],
+            ["Harry Potter and the Philosopher's Stone", 'J. K. Rowling', 'English', '1997', '120 million'],
+            ['And Then There Were None', 'Agatha Christie', 'English', '1939', '100 million'],
+            ['Dream of the Red Chamber', 'Cao Xueqin', 'Chinese', '1791', '100 million'],
+            ['The Hobbit', 'J. R. R. Tolkien', 'English', '1937', '100 million'],
+        ];
+
+        function clone(o) {
+            return JSON.parse(JSON.stringify(o));
+        }
+
+        let dataLog = [];
+        let auxLog = [];
+        let isReplaying = false;
+        let replayID = null;
+
+        function useLoggedState(initialValue, isData) {
+            const [state, setState] = React.useState(initialValue);
+
+            React.useEffect(() => {
+                if (isReplaying) {
+                    return;
+                }
+                if (isData) {
+                    dataLog.push([clone(state), setState]);
+                } else {
+                    const index = dataLog.length - 1;
+                    if (!auxLog[index]) {
+                        auxLog[index] = [];
+                    }
+                    auxLog[index].push([state, setState]);
+                }
+            }, [state]);
+
+            return [state, setState];
+        }
+
+        function Excel({ headers, initialData }) {
+            const [data, setData] = useLoggedState(() => initialData.map((row, index) => row.concat(index)), true);
+            const [sorting, setSorting] = useLoggedState({
+                column: null,
+                descending: false,
+            });
+            const [edit, setEdit] = useLoggedState(null);
+            const [search, setSearch] = useLoggedState(false);
+            const [preSearchData, setPreSearchData] = useLoggedState(null);
+            const [searchTerms, setSearchTerms] = useLoggedState(null);
+
+            console.log(dataLog, auxLog)
+            React.useEffect(() => {
+                function keydownHandler(e) {
+                    if (e.altKey && e.shiftKey && e.keyCode === 82) {
+                        // ALT+SHIFT+R(eplay)
+                        this.replay();
+                    }
+                }
+
+                document.addEventListener('keydown', keydownHandler);
+
+                return () => {
+                    document.removeEventListener('keydown', keydownHandler);
+                    clearInterval(replayID);
+                    dataLog = [];
+                    auxLog = [];
+                }
+            }, []);
+
+            function sort(e) {
+                const column = e.target.cellIndex;
+                const dataCopy = clone(data);
+                const descending = sorting.column === column && !sorting.descending;
+                dataCopy.sort((a, b) => {
+                    if (a[column] === b[column]) {
+                        return 0;
+                    }
+                    return descending
+                        ? a[column] < b[column] ? 1 : -1
+                        : a[column] < b[column] ? -1 : 1;
+                });
+                setData(dataCopy);
+                setSorting({ column, descending });
+            }
+
+            function showEditor(e) {
+                setEdit({
+                    row: parseInt(e.target.parentNode.dataset.row, 10),
+                    column: e.target.cellIndex,
+                });
+            }
+
+            function save(e) {
+                e.preventDefault();
+                const input = e.target.firstChild;
+                const dataCopy = clone(data).map((row) => {
+                    if (row[row.length - 1] == edit.row) {
+                        row[edit.column] = input.value;
+                    }
+                    return row;
+                });
+                setData(dataCopy);
+                if (preSearchData) {
+                    const preSearchDataCopy = clone(preSearchData);
+                    preSearchDataCopy[edit.row][edit.column] = input.value;
+                    setPreSearchData(preSearchDataCopy);
+                }
+                setEdit(null);
+            }
+
+            function toggleSearch() {
+                if (!search) {
+                    setSearch(true);
+                    setPreSearchData(data);
+                    setSearchTerms({});
+                } else {
+                    setSearch(false);
+                    setData(preSearchData);
+                    setPreSearchData(null);
+                    setSearchTerms(null);
+                }
+            }
+
+            function searching(e) {
+                const needle = e.target.value.toLowerCase();
+                const column = e.target.dataset.index;
+                setSearchTerms((prev) => ({ ...prev, [column]: needle }));
+                searchTerms[column] = needle;
+                _filter();
+            }
+
+            function _filter() {
+                let filtered = preSearchData;
+                Object.entries(searchTerms).forEach(([column, needle]) => {
+                    filtered = filtered.filter((item) => item[Number(column)].toString().toLowerCase().includes(needle));
+                });
+                setData(filtered);
+            }
+
+            function replay() {
+                isReplaying = true;
+                let index = 0;
+                replayID = setInterval(() => {
+                    const [data, fn] = dataLog[index];
+                    fn(data);
+                    auxLog[index] &&
+                        auxLog[index].forEach((log) => {
+                            const [data, fn] = log;
+                            fn(data);
+                        });
+                    index++;
+                    if (index > dataLog.length - 1) {
+                        isReplaying = false;
+                        clearInterval(replayID);
+                        return;
+                    }
+                }, 1000);
+            }
+
+            const searchRow = !search ? null : (
+                <tr onChange={searching}>
+                    {headers.map((_, index) => (
+                        <td key={index}>
+                            <input type="text" data-index={index} />
+                        </td>
+                    ))}
+                </tr>
+            );
+
+            return (
+                <React.Fragment>
+                    <button className="toolbar" onClick={toggleSearch}>
+                        {search ? 'Hide search' : 'Show search'}
+                    </button>
+                    <button className="toolbar" onClick={replay}>
+                        Replay
+                    </button>
+
+                    <table>
+                        <thead onClick={sort}>
+                            <tr>
+                                {headers.map((item, index) => {
+                                    let title = item;
+                                    if (sorting.column === index) {
+                                        title += sorting.descending ? ' \u2191' : ' \u2193'
+                                    }
+                                    return <th key={index}>{title}</th>;
+                                })}
+                            </tr>
+                        </thead>
+                        <tbody onDoubleClick={showEditor}>
+                            {searchRow}
+                            {data.map((row, rowIndex) => {
+                                const recordId = row[row.length - 1];
+                                return (
+                                    <tr key={rowIndex} data-row={recordId}>
+                                        {row.map((item, columnIndex) => {
+                                            if (columnIndex === headers.length) {
+                                                return;
+                                            }
+                                            if (edit && edit.row === recordId && edit.column === columnIndex) {
+                                                return (
+                                                    <td key={columnIndex}>
+                                                        <form onSubmit={save}>
+                                                            <input type="text" defaultValue={item} autoFocus />
+                                                        </form>
+                                                    </td>
+                                                );
+                                            }
+                                            return <td key={columnIndex}>{item}</td>;
+                                        })}
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                    </table>
+                </React.Fragment>
+            );
+        }
+
+        Excel.propTypes = {
+            headers: PropTypes.arrayOf(PropTypes.string),
+            initialData: PropTypes.arrayOf(PropTypes.arrayOf(PropTypes.string)),
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(
+            <Excel headers={headers} initialData={data} />
+        );
+    </script>
+
+</body>
+
+</html>

@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hello React</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+    <div id="root"></div>
+
+    <script src="../lib/react.development.js"></script>
+    <script src="../lib/react-dom.development.js"></script>
+    <script src="../lib/babel.min.js"></script>
+    <script src="../lib/prop-types.min.js"></script>
+
+    <script type="text/babel">
+        const headers = ['Book', 'Author', 'Language', 'Published', 'Sales'];
+        const data = [
+            ['A Tale of Two Cities', 'Charles Dickens', 'English', '1859', '200 million'],
+            ['Le Petit Prince (The Little Prince)', 'Antoine de Saint-Exupéry', 'French', '1943', '150 million'],
+            ["Harry Potter and the Philosopher's Stone", 'J. K. Rowling', 'English', '1997', '120 million'],
+            ['And Then There Were None', 'Agatha Christie', 'English', '1939', '100 million'],
+            ['Dream of the Red Chamber', 'Cao Xueqin', 'Chinese', '1791', '100 million'],
+            ['The Hobbit', 'J. R. R. Tolkien', 'English', '1937', '100 million'],
+        ];
+
+        function clone(o) {
+            return JSON.parse(JSON.stringify(o));
+        }
+
+        function Excel({ headers, initialData }) {
+            const [state, setState] = React.useState(() => ({
+                data: initialData.map((row, index) => row.concat(index)),
+                sorting: {
+                    column: null,
+                    descending: false,
+                },
+                edit: null,
+                search: false,
+                preSearchData: null,
+                searchTerms: null,
+            }));
+            const [log, setLog] = React.useState([clone(state)]);
+
+            let replayID;
+
+            React.useEffect(() => {
+                function keydownHandler(e) {
+                    if (e.altKey && e.shiftKey && e.keyCode === 82) {
+                        // ALT+SHIFT+R(eplay)
+                        this.replay();
+                    }
+                }
+
+                document.addEventListener('keydown', keydownHandler);
+
+                return () => {
+                    document.removeEventListener('keydown', keydownHandler);
+                    clearInterval(replayID);
+                }
+            }, []);
+
+            function sort(e) {
+                const column = e.target.cellIndex;
+                const dataCopy = clone(state.data);
+                const descending = state.sorting.column === column && !state.sorting.descending;
+                dataCopy.sort((a, b) => {
+                    if (a[column] === b[column]) {
+                        return 0;
+                    }
+                    return descending
+                        ? a[column] < b[column] ? 1 : -1
+                        : a[column] < b[column] ? -1 : 1;
+                });
+                logSetState({ data: dataCopy, sorting: { column, descending } });
+            }
+
+            function showEditor(e) {
+                logSetState({
+                    edit: {
+                        row: parseInt(e.target.parentNode.dataset.row, 10),
+                        column: e.target.cellIndex,
+                    }
+                });
+            }
+
+            function save(e) {
+                e.preventDefault();
+                const input = e.target.firstChild;
+                const dataCopy = clone(state.data).map((row) => {
+                    if (row[row.length - 1] == state.edit.row) {
+                        row[state.edit.column] = input.value;
+                    }
+                    return row;
+                });
+                let preSearchDataCopy = null;
+                if (state.preSearchData) {
+                    preSearchDataCopy = clone(state.preSearchData);
+                    preSearchDataCopy[state.edit.row][state.edit.column] = input.value;
+                }
+                logSetState({ data: dataCopy, edit: null, preSearchData: preSearchDataCopy });
+            }
+
+            function toggleSearch() {
+                if (!state.search) {
+                    logSetState({ search: true, preSearchData: state.data, searchTerms: {} })
+                } else {
+                    logSetState({ search: false, data: state.preSearchData, preSearchData: null, searchTerms: null })
+                }
+            }
+
+            function searching(e) {
+                const needle = e.target.value.toLowerCase();
+                const column = e.target.dataset.index;
+                const searchTerms = { ...state.searchTerms, [column]: needle };
+                let filtered = state.preSearchData;
+                Object.entries(searchTerms).forEach(([column, needle]) => {
+                    filtered = filtered.filter((item) => item[Number(column)].toString().toLowerCase().includes(needle));
+                });
+                logSetState({ searchTerms, data: filtered });
+            }
+
+            function logSetState(newState) {
+                setLog([...log, { ...state, ...clone(newState) }]);
+                setState({ ...state, ...newState });
+            }
+
+            function replay() {
+                if (log.length === 1) {
+                    console.warn('No state changes to replay yet');
+                    return;
+                }
+                let index = -1;
+                replayID = setInterval(() => {
+                    if (++index === log.length - 1) {
+                        clearInterval(replayID);
+                    }
+                    setState(log[index]);
+                }, 1000);
+            }
+
+            const searchRow = !state.search ? null : (
+                <tr onChange={searching}>
+                    {headers.map((_, index) => (
+                        <td key={index}>
+                            <input type="text" data-index={index} />
+                        </td>
+                    ))}
+                </tr>
+            );
+
+            console.log('render');
+
+            return (
+                <React.Fragment>
+                    <button className="toolbar" onClick={toggleSearch}>
+                        {state.search ? 'Hide search' : 'Show search'}
+                    </button>
+                    <button className="toolbar" onClick={replay}>
+                        Replay
+                    </button>
+
+                    <table>
+                        <thead onClick={sort}>
+                            <tr>
+                                {headers.map((item, index) => {
+                                    let title = item;
+                                    if (state.sorting.column === index) {
+                                        title += state.sorting.descending ? ' \u2191' : ' \u2193'
+                                    }
+                                    return <th key={index}>{title}</th>;
+                                })}
+                            </tr>
+                        </thead>
+                        <tbody onDoubleClick={showEditor}>
+                            {searchRow}
+                            {state.data.map((row, rowIndex) => {
+                                const recordId = row[row.length - 1];
+                                return (
+                                    <tr key={rowIndex} data-row={recordId}>
+                                        {row.map((item, columnIndex) => {
+                                            if (columnIndex === headers.length) {
+                                                return;
+                                            }
+                                            if (state.edit && state.edit.row === recordId && state.edit.column === columnIndex) {
+                                                return (
+                                                    <td key={columnIndex}>
+                                                        <form onSubmit={save}>
+                                                            <input type="text" defaultValue={item} autoFocus />
+                                                        </form>
+                                                    </td>
+                                                );
+                                            }
+                                            return <td key={columnIndex}>{item}</td>;
+                                        })}
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                    </table>
+                </React.Fragment>
+            );
+        }
+
+        Excel.propTypes = {
+            headers: PropTypes.arrayOf(PropTypes.string),
+            initialData: PropTypes.arrayOf(PropTypes.arrayOf(PropTypes.string)),
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(
+            <Excel headers={headers} initialData={data} />
+        );
+    </script>
+
+</body>
+
+</html>
